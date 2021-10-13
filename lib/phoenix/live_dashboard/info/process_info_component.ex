@@ -42,7 +42,8 @@ defmodule Phoenix.LiveDashboard.ProcessInfoComponent do
             <tr><td>Initial call</td><td><pre><%= @initial_call %></pre></td></tr>
             <tr><td>Status</td><td><pre><%= @status %></pre></td></tr>
             <tr><td>Message queue length</td><td><pre><%= @message_queue_len %></pre></td></tr>
-            <tr><td>Links</td><td><pre><%= @links %></pre></td></tr>
+            <tr><td>Ancestors</td><td><pre><%= @ancestor_links %></pre></td></tr>
+            <tr><td>Other Links</td><td><pre><%= @other_links %></pre></td></tr>
             <tr><td>Monitors</td><td><pre><%= @monitors %></pre></td></tr>
             <tr><td>Monitored by</td><td><pre><%= @monitored_by %></pre></td></tr>
             <tr><td>Trap exit</td><td><pre><%= @trap_exit %></pre></td></tr>
@@ -89,14 +90,32 @@ defmodule Phoenix.LiveDashboard.ProcessInfoComponent do
   defp assign_info(%{assigns: assigns} = socket) do
     case SystemInfo.fetch_process_info(assigns.pid) do
       {:ok, info} ->
-        Enum.reduce(info, socket, fn {key, val}, acc ->
-          assign(acc, key, format_info(key, val, assigns.path))
+        Enum.reduce(info, socket, fn
+          {:ancestors, ancestors}, acc ->
+            ancestor_pids = lookup_pids(ancestors)
+
+            acc
+            |> assign(:ancestor_links, format_info(:links, ancestor_pids, assigns.path))
+            |> assign(
+              :other_links,
+              format_info(:links, info[:links] -- ancestor_pids, assigns.path)
+            )
+
+          {key, val}, acc ->
+            assign(acc, key, format_info(key, val, assigns.path))
         end)
         |> assign(alive: true)
 
       :error ->
         assign(socket, alive: false)
     end
+  end
+
+  defp lookup_pids(names_or_pids) do
+    Enum.map(names_or_pids, fn
+      pid when is_pid(pid) -> pid
+      name when is_atom(name) -> Process.whereis(name)
+    end)
   end
 
   defp format_info(key, val, live_dashboard_path)

@@ -1,7 +1,7 @@
 defmodule Phoenix.LiveDashboard.Helpers do
   @moduledoc false
 
-  alias Phoenix.LiveDashboard.PageBuilder
+  alias Phoenix.LiveDashboard.{PageBuilder, SystemInfo}
   import Phoenix.LiveView.Helpers
   @format_limit 100
 
@@ -15,7 +15,9 @@ defmodule Phoenix.LiveDashboard.Helpers do
   end
 
   def format_value(pid, live_dashboard_path) when is_pid(pid) do
-    live_patch(inspect(pid),
+    description = pid_description(pid)
+
+    live_patch(inspect(pid) <> if(description, do: " - #{description}", else: ""),
       to: live_dashboard_path.(node(pid), info: PageBuilder.encode_pid(pid))
     )
   end
@@ -30,6 +32,16 @@ defmodule Phoenix.LiveDashboard.Helpers do
   end
 
   def format_value(other, _socket), do: inspect(other, pretty: true, limit: @format_limit)
+
+  defp pid_description(pid) do
+    case SystemInfo.fetch_process_info(pid) do
+      {:ok, process_info} ->
+        process_info[:name_or_initial_call]
+
+      _ ->
+        nil
+    end
+  end
 
   @doc """
   Formats initial calls.

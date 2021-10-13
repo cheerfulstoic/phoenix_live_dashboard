@@ -186,7 +186,6 @@ defmodule Phoenix.LiveDashboard.SystemInfo do
   ## Process Callbacks
 
   @processes_keys [
-    :registered_name,
     :initial_call,
     :memory,
     :reductions,
@@ -216,18 +215,25 @@ defmodule Phoenix.LiveDashboard.SystemInfo do
 
   defp process_info(pid, prev_reductions) do
     if info = Process.info(pid, @processes_keys) do
-      [{:registered_name, name}, {:initial_call, initial_call} | rest] = info
-
-      name_or_initial_call =
-        if is_atom(name) do
-          inspect(name)
-        else
-          format_initial_call(get_initial_call(pid, initial_call))
-        end
+      [{:initial_call, initial_call} | rest] = info
 
       diff = info[:reductions] - (prev_reductions || 0)
 
-      [pid: pid, name_or_initial_call: name_or_initial_call, reductions_diff: diff] ++ rest
+      [
+        pid: pid,
+        name_or_initial_call: name_or_initial_call(pid, initial_call),
+        reductions_diff: diff
+      ] ++ rest
+    end
+  end
+
+  defp name_or_initial_call(pid, initial_call) do
+    case Process.info(pid, :registered_name) do
+      {:registered_name, name} when is_atom(name) ->
+        inspect(name)
+
+      _ ->
+        format_initial_call(get_initial_call(pid, initial_call))
     end
   end
 
@@ -273,9 +279,19 @@ defmodule Phoenix.LiveDashboard.SystemInfo do
 
   def process_info_callback(pid) do
     case Process.info(pid, @process_info_keys) do
-      [{:initial_call, initial_call}, {:dictionary, dict} | info] ->
+      [
+        {:initial_call, initial_call},
+        {:dictionary, dict} | info
+      ] ->
         initial_call = Keyword.get(dict, :"$initial_call", initial_call)
-        {:ok, [{:initial_call, initial_call} | info]}
+        ancestors = Keyword.get(dict, :"$ancestors", [])
+
+        {:ok,
+         [
+           {:initial_call, initial_call},
+           {:ancestors, ancestors},
+           {:name_or_initial_call, name_or_initial_call(pid, initial_call)} | info
+         ]}
 
       nil ->
         :error
